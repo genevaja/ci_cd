@@ -1,0 +1,61 @@
+stages:
+  - build
+  - codestyle
+  - tests
+  - deploy
+  - notify
+
+build:
+  stage: build
+  tags:
+    - school21
+  script:
+    - cd src
+    - make
+  artifacts:
+    paths:
+      - src/bin/
+    expire_in: 30 days
+
+codestyle:
+  stage: codestyle
+  tags:
+    - school21
+  script:
+    - clang-format -n --Werror --ferror-limit=1 ./src/cat/*.[ch]
+    - clang-format -n --Werror --ferror-limit=1 ./src/grep/*.[ch]
+  when: always
+
+tests:
+  stage: tests
+  tags:
+    - school21
+  script:
+    - cd ./src
+    - ./cat/own_test.sh
+    - ./grep/grep.sh
+  when: on_success
+
+deploy:
+  before_script:
+    - 'which ssh-agent || ( apt-get update -y && apt-get install openssh-client -y )'
+    - eval $(ssh-agent -s)
+    - cat /home/gitlab-runner/.ssh/id_rsa | ssh-add -
+    - echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config
+
+  stage: deploy
+  tags:
+    - school21
+  script:
+    - scp ./src/bin/* root@192.168.0.20:/usr/local/bin
+    - sh ./src/ci-notify.sh ✅
+  when: on_success
+
+# Stage в случае ошибки
+notify_error:
+  stage: notify
+  tags:
+    - school21
+  script:
+    - sh ./src/ci-notify.sh ❌
+  when: on_failure #deploy fail
